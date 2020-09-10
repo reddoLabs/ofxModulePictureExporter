@@ -1,0 +1,32 @@
+{
+    "PictureExporter": {
+        "defaultStyle": "image",
+        "styles": [
+            {
+                "id": "image",
+                "outputType": "png"
+            },
+            {
+                "height": 1080,
+                "id": "movie",
+                "nLoops": 5,
+                "outputType": "mp4",
+                "width": 1920
+            },
+            {
+                "id": "print",
+                "width": 1844,
+                "height": 1240,
+                "outputType": "png",
+                "fit":"fill"
+            }
+        ],
+        "capture":{
+            "file":"capture.mp4",
+            "codec":"libx264",
+            "bitrate":"",
+            "framerate":25,
+            "extraSettings":""
+        }
+    }
+}

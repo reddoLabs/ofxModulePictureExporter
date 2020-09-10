@@ -1,0 +1,31 @@
+{
+    "PictureExporter": {
+        "defaultStyle": "image",
+        "styles": [
+            {
+                "id": "image",
+                "outputType": "png"
+            },
+            {
+                
+                "id": "small",
+                "outputType": "jpg",
+                "width": 500,
+                "height": 200
+            },
+            {
+                "id": "square",
+                "width": 512,
+                "height": 513,
+                "outputType": "png"
+            }
+        ],
+        "capture":{
+            "file":"capture.mov",
+            "codec":"hap -format hap_alpha",
+            "bitrate":"",
+            "framerate":30,
+            "extraSettings":""
+        }
+    }
+}

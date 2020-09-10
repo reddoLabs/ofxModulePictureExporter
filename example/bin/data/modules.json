@@ -1,0 +1,14 @@
+[
+	{
+		"type":"PictureExporter",
+		"inputs":["Presenter"]
+	},
+	{
+		"type":"Camera",
+		"inputs":["Presenter"]
+	},
+	{
+		"type":"Presenter",
+		"inputs":["Camera"]
+	}
+]
