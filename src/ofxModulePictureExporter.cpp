@@ -9,39 +9,45 @@ namespace ofxModule {
 			styles.insert(pair<string, ExportSettings>(style["id"], readExportSettings(style)));
 		}
 
+		// init image uploader
+		if (settings["upload"].is_object()) {
+			PostRequestFileSettings imageUploadSettings;
+			imageUploadSettings.timeout = settings["upload"]["timeout"].is_null() ? 3 : settings["upload"]["timeout"].get<int>();
+			imageUploadSettings.token = settings["upload"]["token"].is_null() ? "" : settings["upload"]["token"].get<string>();
+			imageUploadSettings.url = settings["upload"]["url"].is_null() ? "" : settings["upload"]["url"].get<string>();
+			imageUploadSettings.user = settings["upload"]["user"].is_null() ? "" : settings["upload"]["user"].get<string>();
+
+			if (settings["upload"]["header"].is_array()) {
+				for (auto header : settings["upload"]["header"]) {
+					imageUploadSettings.header.insert(make_pair(header[0].get<string>(), header[1].get<string>()));
+				}
+			}
+			imageUploader.setup(imageUploadSettings);
+			ofAddListener(imageUploader.imageUploadEvent, this, &ofxModulePictureExporter::onImageUploaded);
+		}
+		
+
+
+
+		//imageExportThread.startThread();
     }
 
 	void ofxModulePictureExporter::draw()
 	{
-		/*if (jobs.size() > 0) {
-			if (jobs.front().inputType == TEXTURE) {
-				lock();
-				textureToImage(jobs.front());
-				unlock();
-			} else if (jobs.front().inputType == FBO) {
-				lock();
-				fboToImage(jobs.front());
-				unlock();
-			}
-		}*/
-
-		// use textureSaver for saving textures and fbos
 	}
     
     //------------------------------------------------------------------
     void ofxModulePictureExporter::update() {
 		if (jobs.size() > 0) {
-			//if (jobs.front().inputType == IMAGE) {
-				exportJob(jobs.front());
-				jobs.pop_front();
-			//}
+			exportJob(jobs.front());
+			jobs.pop_front();
 		}
     }
 
-	void ofxModulePictureExporter::saveImage(ofImage img, vector<string> path)
+	void ofxModulePictureExporter::saveImage(ofImage img, vector<string> path, ofImageQualityType quality)
 	{
 		for (auto& p : path) {
-			ofSaveImage(img, p);
+			ofSaveImage(img, p,quality);
 		}
 		
 	}
@@ -121,40 +127,6 @@ namespace ofxModule {
 		}
 
 		readPathAndStyleSettings(s, e.message);
-
-		//// get export paths
-		//if (!e.message["paths"].is_null()) {
-		//	if (e.message["paths"].is_array()) {
-		//		s.exportPaths = e.message["paths"].get<vector<string>>();
-		//	} else {
-		//		s.exportPaths.push_back(e.message["paths"]["folder"].get<string>());
-		//	}
-		//}
-
-		////get export style
-		//s.exportSettings = styles[defaultStyle];
-		//if (!e.message["style"].is_null()) {
-		//	if (styles.find(e.message["style"]) != styles.end()) {
-		//		s.exportSettings = styles[e.message["style"].get<string>()];
-		//	}
-		//}
-		//else if (!e.message["styleSettings"].is_null()) {
-		//	updateExportSettings(s.exportSettings, e.message["styleSettings"]);
-		//}
-
-		//// get filename
-		//s.filename.clear();
-		//if (e.message["filename"].is_null()) {
-		//	s.filename = "[yy]-[mm]-[dd]-[s]";
-		//	if (s.inputType == IMAGE && s.images.size() > 1) s.filename += "_[n]";
-		//	if (s.inputType == TEXTURE && s.textures.size() > 1) s.filename += "_[n]";
-		//	if (s.inputType == FBO && s.fbos.size() > 1) s.filename += "_[n]";
-		//} else {
-		//	s.filename = e.message["filename"].get<string>();
-		//}
-
-		// add job
-		//jobs.push_back(s);
 		exportImages(s);
 	}
 
@@ -195,27 +167,6 @@ namespace ofxModule {
 		}
 	}
 
-	//void ofxModulePictureExporter::printImage(ofImage img, int copies)
-	//{
-	//	if (printingType == "hotfolder") {
-	//		for (int i = 0; i < copies; ++i) {
-	//			ofSaveImage(img, printPath + "/print_" + ofToString(copies) + ".png");
-	//		}
-	//	}
-	//	else if (printingType == "console")
-	//	{
-	//		ofSaveImage(img, printPath + "/print.png");
-	//		for (int i = 0; i < copies; ++i) {
-	//			printConsole(printPath + "/print.png");
-	//		}
-	//	}
-	//	else if (printingType == "irfanview") {
-	//		ofSaveImage(img, printPath + "/print.png");
-	//		for (int i = 0; i < copies; ++i) {
-	//			printIrfanView(printPath + "/print.png");
-	//		}
-	//	}
-	//}
 	///\brief replace all codes with values
 	vector<string> ofxModulePictureExporter::fileCodeToFilename(string code, int nImages) {
 		vector < string> ret;
@@ -233,6 +184,7 @@ namespace ofxModule {
 		ofStringReplace(code, "[SS]", ofGetMinutes() < 10 ? "0" + ofToString(ofGetSeconds()) : ofToString(ofGetSeconds()));
 		ofStringReplace(code, "[i]", ofGetTimestampString("%i"));
 		ofStringReplace(code, "[s]", ofToString(ofGetHours()*3600 + ofGetMinutes()*60 + ofGetSeconds()));
+
 
 		auto numberPlaceholders = matchesInRegex(code, "\\[(n*)\\]");
 		for (size_t i = 0; i < nImages; i++) {
@@ -381,16 +333,6 @@ namespace ofxModule {
 		else {
 			exportMp4(tJob);
 		}
-		/*string outputType = job.exportSettings.outputType;
-		for (auto& j:job.exportPaths) {
-			tJob.exportPaths.clear();
-			tJob.exportPaths.push_back(j);
-			if (outputType == "png" || outputType == "jpg") {
-				exportImages(tJob);
-			} else {
-				exportMp4(tJob);
-			}
-		}*/
 		
 	}
 
@@ -400,10 +342,10 @@ namespace ofxModule {
 		exportMetaData(job);
 
 		// clear image export threads
-		for (auto& thread : imageExportThreads) {
+		/*for (auto& thread : imageExportThreads) {
 			thread.join();
 		}
-		imageExportThreads.clear();
+		imageExportThreads.clear();*/
 
 		// get filepaths
 		int nImages;
@@ -450,6 +392,17 @@ namespace ofxModule {
 
 			switch (job.inputType) {
 			case IMAGE:
+				for (int i = 0; i < nImages; ++i) {
+					ofFbo fbo;
+					fbo.allocate(job.images[i]->getWidth(), job.images[i]->getHeight());
+					fbo.begin();
+					ofClear(0, 0);
+					ofSetColor(255);
+					job.images[i]->draw(0, 0);
+					fbo.end();
+					job.fbos.push_back(shared_ptr<ofFbo>(new ofFbo(fbo)));
+
+				}
 				break;
 			case TEXTURE:
 			{
@@ -461,50 +414,81 @@ namespace ofxModule {
 					ofSetColor(255);
 					job.textures[i]->draw(0, 0);
 					fbo.end();
-					job.images.push_back(shared_ptr<ofImage>(new ofImage()));
-					ofPixels p;
-					fbo.readToPixels(p);
-					job.images.back()->setFromPixels(p);
+					job.fbos.push_back(shared_ptr<ofFbo>(new ofFbo(fbo)));
 				}
 				break;
 			}
 			case FBO:
-				for (int i = 0; i < nImages; ++i) {
-					job.images.push_back(shared_ptr<ofImage>(new ofImage()));
-					ofPixels p;
-					job.fbos[i]->readToPixels(p);
-					job.images.back()->setFromPixels(p);
-				}
+				break;
 			}
-
-			imageExportThreads.push_back(std::thread([nImages, job, filePaths, path, width, height] {
 
 				for (int i = 0; i < nImages; ++i) {
 					string filename = filePaths[i] + ".";
 					filename += job.exportSettings.outputType;
 
 					string exportPath;
-					/*if (path.first != "") {
-						exportPath += "/";
-					}*/
 					exportPath = path +"/" + filename;
 
 					// resize and crop
-					if (job.images[i]->getWidth() != width || job.images[i]->getHeight() != height) {
+					if (job.fbos[i]->getWidth() != width || job.fbos[i]->getHeight() != height) {
 
-						ofRectangle in{ 0,0,job.images[i]->getWidth(),job.images[i]->getHeight() };
+						ofRectangle in{ 0,0,job.fbos[i]->getWidth(),job.fbos[i]->getHeight() };
 						ofRectangle out{ 0,0,float(width),float(height) };
-
-						in.scaleTo(out, job.exportSettings.fit);
-
-						job.images[i]->resize(in.width, in.height);
-						job.images[i]->crop(0.5*(in.width - out.width), 0.5*(in.height - out.height), out.width, out.height);
+						ofFbo outFbo;
+						outFbo.allocate(out.width, out.height);
+						outFbo.begin();
+						ofClear(0, 0);
+						switch (job.exportSettings.fit)
+						{
+						case OF_SCALEMODE_FIT:
+							in.scaleTo(out, OF_ASPECT_RATIO_KEEP, job.exportSettings.horzAlignment, job.exportSettings.vertAlignment);
+							job.fbos[i]->draw(in);
+							break;
+						case OF_SCALEMODE_FILL:
+							in.scaleTo(out, OF_SCALEMODE_FILL);
+							if (job.exportSettings.horzAlignment == OF_ALIGN_HORZ_LEFT) {
+								in.x = 0;
+							}
+							else if (job.exportSettings.horzAlignment == OF_ALIGN_HORZ_RIGHT) {
+								in.x *= 2;
+							}
+							if (job.exportSettings.vertAlignment == OF_ALIGN_VERT_TOP) {
+								in.y = 0;
+							}
+							else if (job.exportSettings.vertAlignment == OF_ALIGN_VERT_BOTTOM) {
+								in.y *= 2;
+							}
+							job.fbos[i]->draw(in);
+							break;
+						default:
+							break;
+						}
+					
+						outFbo.end();
+						job.fbos[i] = shared_ptr<ofFbo>(new ofFbo(outFbo));
 					}
-					job.images[i]->save(exportPath);
 
+					// read to of Image
+					ofPixels p;
+					job.fbos[i]->readToPixels(p);
+					ofImage img;
+					img.setFromPixels(p);
+
+					// decide if local folder or web upload
+					if (ofIsStringInString(path, "http://") || ofIsStringInString(path, "https://")) {
+						// save local
+						img.save("temp/" + filename, job.exportSettings.quality);
+						// upload to server
+						imageUploader.sendRequest("temp/" + filename);
+					}
+					else {
+						img.save(exportPath, job.exportSettings.quality);
+					}
 				}
+				
 
-			}));
+
+			//}));
 		}
 	}
 
@@ -615,7 +599,7 @@ namespace ofxModule {
 
 			string convertCmd = ffmpeg; // start ffmpeg 
 			convertCmd += " -y "; // overwrite existing file
-			//convertCmd += " -framerate " + ofToString(path.second.framerate); // set framerate
+			//convertCmd += " -framerate " + ofToString(path.second.framerate); // set 
 			for (auto& file:job.movies) {
 				convertCmd += " -i " + ofFilePath::getAbsolutePath(file) + " "; // set image path
 			}
@@ -725,6 +709,25 @@ namespace ofxModule {
 				settings.fit = OF_SCALEMODE_CENTER;
 			}
 		}
+
+		if (!json["quality"].is_null()) {
+			string quality = json["quality"].get<string>();
+			if (quality == "best") {
+				settings.quality = OF_IMAGE_QUALITY_BEST;
+			}
+			else if (quality == "high") {
+				settings.quality = OF_IMAGE_QUALITY_HIGH;
+			}
+			else if (quality == "medium") {
+				settings.quality = OF_IMAGE_QUALITY_MEDIUM;
+			}
+			else if (quality == "low") {
+				settings.quality = OF_IMAGE_QUALITY_LOW;
+			}
+			else if (quality == "worst") {
+				settings.quality = OF_IMAGE_QUALITY_WORST;
+			}
+		}
 		if (!json["loopType"].is_null() && json["loopType"].get<string>() != "") {
 			if (json["loopType"].get<string>() == "none") {
 				settings.loop = OF_LOOP_NONE;
@@ -737,6 +740,35 @@ namespace ofxModule {
 		if (!json["nLoops"].is_null()) {
 			settings.nLoops = json["nLoops"];
 		}
+
+		if (!json["vertAlignment"].is_null() && json["vertAlignment"].get<string>() != "") {
+			if (json["vertAlignment"].get<string>() == "bottom") {
+				settings.vertAlignment = OF_ALIGN_VERT_BOTTOM;
+			}
+			else if (json["vertAlignment"].get<string>() == "center") {
+				settings.vertAlignment = OF_ALIGN_VERT_CENTER;
+			}
+			else if (json["vertAlignment"].get<string>() == "top") {
+				settings.vertAlignment = OF_ALIGN_VERT_TOP;
+			}
+		}
+
+		if (!json["horzAlignment"].is_null() && json["horzAlignment"].get<string>() != "") {
+			if (json["horzAlignment"].get<string>() == "left") {
+				settings.horzAlignment = OF_ALIGN_HORZ_LEFT;
+			}
+			else if (json["horzAlignment"].get<string>() == "center") {
+				settings.horzAlignment = OF_ALIGN_HORZ_CENTER;
+			}
+			else if (json["horzAlignment"].get<string>() == "right") {
+				settings.horzAlignment = OF_ALIGN_HORZ_RIGHT;
+			}
+		}
+	}
+
+	void ofxModulePictureExporter::setupImageUploader(PostRequestFileSettings settings)
+	{
+		imageUploader.setup(settings);
 	}
 
 	void ofxModulePictureExporter::startVideoCapture(ofxTextureRecorder::VideoSettings vidSettings, int recorderId) {
@@ -783,7 +815,6 @@ namespace ofxModule {
 	void ofxModulePictureExporter::stopVideoCapture(int recorderId) {
 		if (isVideoCapturing.find(recorderId) != isVideoCapturing.end() && isVideoCapturing[recorderId]) {
 			imageSaver[recorderId]->stop();
-			//imageSaver.erase(recorderId);
 		}
 	}
 
@@ -797,28 +828,60 @@ namespace ofxModule {
 		string cmd = "copy " + file + " " + dest;
 		ofSystem(cmd);
 	}
+	void ofxModulePictureExporter::onImageUploaded(ofJson& event)
+	{
+		if (event["status"].get<int>() == 200) {
+			event["success"] = true;
+		}
+		else {
+			event["success"] = false;
+		}
 
-	//void ofxModulePictureExporter::printConsole(string fileName)
-	//{
-	//	string syscall = "rundll32 c:\\windows\\system32\\shimgvw.dll,ImageView_PrintTo /pt \"";
-	//	string path = ofFilePath::getAbsolutePath(fileName);
-	//	path[2] = '\\';
-	//	syscall += path;
-	//	syscall += "\" \"";
-	//	syscall += printer;
-	//	syscall += "\"";
-	//	ofSystem(syscall.c_str());
-	//	//ofLogNotice("print", syscall);
-	//}
-	//void ofxModulePictureExporter::printIrfanView(string fileName)
-	//{
-	//	string syscall = "C:\\IrfanView\\i_view32.exe ";
-	//	string path = ofFilePath::getAbsolutePath(fileName);
-	//	path[2] = '\\';
-	//	syscall += path;
-	//	syscall += " /ini=C:\\IrfanView\\ /print=\"";
-	//	syscall += printer;
-	//	syscall += "\"";
-	//	ofSystem(syscall.c_str());
-	//}
+		notifyEvent("imageUploaded", event);
+	}
+	/*
+	void ImageExportThread::threadedFunction()
+	{
+		while (isThreadRunning()) {
+			if (containers.size() > 0) {
+
+				for (int i = 0; i < containers.front().job.images.size(); ++i) {
+					string filename = containers.front().filePaths.front()[i] + ".";
+					filename += containers.front().job.exportSettings.outputType;
+
+					string exportPath;
+					exportPath = containers.front().path + "/" + filename;
+
+					int width = containers.front().job.images.front()->getWidth();
+					int height = containers.front().job.images.front()->getHeight();
+
+					// resize and crop
+					if (containers.front().job.images[i]->getWidth() != width || containers.front().job.images[i]->getHeight() != height) {
+
+						ofRectangle in{ 0,0,containers.front().job.images[i]->getWidth(),containers.front().job.images[i]->getHeight() };
+						ofRectangle out{ 0,0,float(width),float(height) };
+
+						in.scaleTo(out, containers.front().job.exportSettings.fit);
+
+						containers.front().job.images[i]->resize(in.width, in.height);
+						containers.front().job.images[i]->crop(0.5 * (in.width - out.width), 0.5 * (in.height - out.height), out.width, out.height);
+					}
+					containers.front().job.images[i]->save(exportPath, containers.front().job.exportSettings.quality);
+				}
+				std::unique_lock<std::mutex> lock(mutex);
+				containers.pop_front();
+				condition.notify_all();
+			}
+			else {
+				sleep(20);
+			}
+			
+		}
+	}
+	void ImageExportThread::addExport(ExportContainer container)
+	{
+		std::unique_lock<std::mutex> lock(mutex);
+		containers.push_back(container);
+		condition.notify_all();
+	}*/
 }

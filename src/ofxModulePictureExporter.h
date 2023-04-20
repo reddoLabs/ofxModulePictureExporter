@@ -4,6 +4,7 @@
 #include "ofMain.h"
 #include "ModuleDrawable.h"
 #include "ofxTextureRecorder.h"
+#include "ImageUploader.h"
 
 #define FFMPEG_FOLDER "ffmpeg/ffmpeg.exe"
 
@@ -21,6 +22,10 @@ namespace ofxModule {
 		int width = 0;
 		int height = 0;
 		ofScaleMode fit = OF_SCALEMODE_FILL;
+		ofImageQualityType quality = OF_IMAGE_QUALITY_BEST;
+		ofAlignVert vertAlignment = ofAlignVert::OF_ALIGN_VERT_CENTER;
+		ofAlignHorz horzAlignment = ofAlignHorz::OF_ALIGN_HORZ_CENTER;
+
 
 		// movie Settings
 		float framerate = 25;
@@ -29,6 +34,13 @@ namespace ofxModule {
 	};
 
 	struct ImageExportJob {
+		~ImageExportJob() {
+			images.clear();
+			fbos.clear();
+			textures.clear();
+			movies.clear();
+			exportPaths.clear();
+		};
 		ImageInputType inputType;
 		
 		vector<shared_ptr<ofImage>> images;
@@ -44,7 +56,32 @@ namespace ofxModule {
 
 		ofJson metaData;
 	};
+	/*
+	struct ExportContainer {
+		~ExportContainer() {
+		};
+		ImageExportJob job;
+		vector<string> filePaths;
+		string path;
+	};
 
+
+	class ImageExportThread : public ofThread {
+	public:
+		~ImageExportThread() {
+			std::unique_lock<std::mutex> lck(mutex);
+			containers.clear();
+			stopThread();
+			condition.notify_all();
+		}
+		void threadedFunction();
+		void addExport(ExportContainer container);
+
+	private:
+		std::condition_variable condition;
+		deque< ExportContainer> containers;
+	};
+	*/
 
 // A module for saving and printing images
 class ofxModulePictureExporter : public ModuleDrawable {
@@ -55,7 +92,7 @@ class ofxModulePictureExporter : public ModuleDrawable {
     void update();
 
 
-	void saveImage(ofImage img, vector <string> path);
+	void saveImage(ofImage img, vector <string> path, ofImageQualityType quality);
 	
 	void copyFiles(ofJson config);
 	//void copyFiles(string file, vector<string> dst);
@@ -67,6 +104,9 @@ class ofxModulePictureExporter : public ModuleDrawable {
 	//void printImage(ofImage img, int copies);
 	static vector<string> fileCodeToFilename(string code, int nImages);
 	static string fileCodeToFilename(string code);
+
+	// image upload
+	void setupImageUploader(PostRequestFileSettings settings);
     
 protected:
     void proceedModuleEvent(ModuleEvent& e);
@@ -78,8 +118,8 @@ protected:
 	void exportImages(ImageExportJob job);
 	void exportMp4(ImageExportJob job);
 	void readMetaData(ImageExportJob& job, ofJson json);
-	void exportMetaData(ImageExportJob job);
-	void exportMetaData(string path, ofJson json);
+	static void exportMetaData(ImageExportJob job);
+	static void exportMetaData(string path, ofJson json);
 
 	vector<string> createFfmpegCommand(ImageExportJob job);
 
@@ -89,6 +129,7 @@ protected:
 	void readPathAndStyleSettings(ImageExportJob& job, ofJson config);
 
 	void updateExportSettings(ExportSettings& settings, ofJson json);
+
 
 	///// \brief print from windows console command
 	//void printConsole(string fileName);
@@ -102,6 +143,8 @@ protected:
 	void stopVideoCapture(int recorderId = 0);
 	void copyFile(string file, vector<string> dest);
 	void copyFile(string file, string dest);
+
+	void onImageUploaded(ofJson& event);
     
 private:
 	
@@ -127,12 +170,16 @@ private:
 	std::vector<std::thread> copyThreads;
 	long tLastThreadStarted = 0; // timestamp to delete old threads
 	int tMaxThreadTime = 30000;
-	std::vector<std::thread> imageExportThreads;
+
+	//ImageExportThread imageExportThread;
+
+	//std::vector<std::thread> imageExportThreads;
 
 	// video record
 	map<int,bool> isVideoCapturing;
 
-
+	ImageUploader imageUploader;
+	
 };
 }
 #endif
